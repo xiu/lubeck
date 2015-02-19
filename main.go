@@ -51,7 +51,7 @@ func main() {
 
 	work := func() {
 		gobot.On(buttonred.Event("push"), func(data interface{}) {
-			inception := exec.Command("play", "/root/inception.mp3")
+			inception := exec.Command("play", "inception.mp3")
 			fmt.Println("PUSHED RED")
 			ledred.On()
 			inception.Run()
@@ -59,7 +59,7 @@ func main() {
 		})
 
                 gobot.On(buttongreen.Event("push"), func(data interface{}) {
-		        blabla := exec.Command("play", "/root/blabla.mp3")
+		        blabla := exec.Command("play", "blabla.mp3")
                         fmt.Println("PUSHED GREEN")
                         ledgreen.On()
                         blabla.Run()
@@ -67,7 +67,7 @@ func main() {
                 })
 
 		gobot.On(buttonyellow.Event("push"), func(data interface{}) {
-	                cotcot := exec.Command("play", "/root/cotcot.mp3")
+	                cotcot := exec.Command("play", "cotcot.mp3")
 			fmt.Println("PUSHED YELLOW")
 			ledyellow.On()
 			cotcot.Run()
@@ -75,7 +75,7 @@ func main() {
 		})	
 		
                 gobot.On(buttonblue.Event("push"), func(data interface{}) {
-	                toilets := exec.Command("play", "/root/toilets.mp3")
+	                toilets := exec.Command("play", "toilets.mp3")
                         fmt.Println("PUSHED BLUE")
                         ledblue.On()
                         toilets.Run()
@@ -83,7 +83,7 @@ func main() {
                 })
 
                 gobot.On(buttonwhite.Event("push"), func(data interface{}) {
-	                whip := exec.Command("play", "/root/whip.mp3")
+	                whip := exec.Command("play", "whip.mp3")
                         fmt.Println("PUSHED WHITE")
                         ledwhite.On()
                         whip.Run()
