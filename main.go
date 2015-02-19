@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
+	"math/rand"
 	"os/exec"
 	"time"
 
@@ -10,90 +12,71 @@ import (
 	"github.com/hybridgroup/gobot/platforms/raspi"
 )
 
+type ArcadeButton struct {
+	led       *gpio.LedDriver
+	button    *gpio.ButtonDriver
+	soundPath string
+}
+
+func chooseSound(dirname string) string {
+	rand.Seed(time.Now().Unix())
+
+	files, _ := ioutil.ReadDir(dirname)
+
+	file := files[rand.Intn(len(files))]
+
+	return dirname + "/" + file.Name()
+}
+
 func main() {
-	gbot := gobot.NewGobot()
 
 	r := raspi.NewRaspiAdaptor("raspi")
-	ledred := gpio.NewLedDriver(r, "led-red", "3")
-	ledgreen := gpio.NewLedDriver(r, "led-green", "5")
-	ledyellow := gpio.NewLedDriver(r, "led-yellow", "7")
-	ledblue := gpio.NewLedDriver(r, "led-blue", "11")
-	ledwhite := gpio.NewLedDriver(r, "led-white", "13")
-	buttonred := gpio.NewButtonDriver(r, "button-red", "15")
-	buttongreen := gpio.NewButtonDriver(r, "button-green", "19")
-        buttonyellow := gpio.NewButtonDriver(r, "button-yellow", "21")
-        buttonblue := gpio.NewButtonDriver(r, "button-blue", "23")
-        buttonwhite := gpio.NewButtonDriver(r, "button-white", "12")
 
-	ledred.Off()
-	ledgreen.Off()
-	ledyellow.Off()
-	ledblue.Off()
-	ledwhite.Off()
+	var buttons = map[string]ArcadeButton{
+		"red":    {gpio.NewLedDriver(r, "led-red", "3"), gpio.NewButtonDriver(r, "button-red", "15"), "./sounds/tragic"},
+		"green":  {gpio.NewLedDriver(r, "led-green", "5"), gpio.NewButtonDriver(r, "button-green", "19"), "./sounds/tagueule"},
+		"yellow": {gpio.NewLedDriver(r, "led-yellow", "7"), gpio.NewButtonDriver(r, "button-yellow", "21"), "./sounds/wtf"},
+		"blue":   {gpio.NewLedDriver(r, "led-blue", "11"), gpio.NewButtonDriver(r, "button-blue", "23"), "./sounds/yeah"},
+		"white":  {gpio.NewLedDriver(r, "led-white", "13"), gpio.NewButtonDriver(r, "button-white", "12"), "./sounds/slap"},
+	}
 
-	ledred.On()
-	time.Sleep(100 * time.Millisecond)
-	ledgreen.On()
-	time.Sleep(100 * time.Millisecond)
-	ledyellow.On()
-	time.Sleep(100 * time.Millisecond)
-	ledblue.On()
-	time.Sleep(100 * time.Millisecond)
-	ledwhite.On()
-	time.Sleep(100 * time.Millisecond)
+	gbot := gobot.NewGobot()
 
-        ledred.Off()
-        ledgreen.Off()
-        ledyellow.Off()
-        ledblue.Off()
-        ledwhite.Off()
-	
+	allOff := func() {
+		for _, b := range buttons {
+			b.led.Off()
+		}
+	}
+
+	allOn := func() {
+		for _, b := range buttons {
+			b.led.On()
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+	allOff()
+	allOn()
+	allOff()
 
 	work := func() {
-		gobot.On(buttonred.Event("push"), func(data interface{}) {
-			inception := exec.Command("play", "inception.mp3")
-			fmt.Println("PUSHED RED")
-			ledred.On()
-			inception.Run()
-			ledred.Off()
-		})
-
-                gobot.On(buttongreen.Event("push"), func(data interface{}) {
-		        blabla := exec.Command("play", "blabla.mp3")
-                        fmt.Println("PUSHED GREEN")
-                        ledgreen.On()
-                        blabla.Run()
-                        ledgreen.Off()
-                })
-
-		gobot.On(buttonyellow.Event("push"), func(data interface{}) {
-	                cotcot := exec.Command("play", "cotcot.mp3")
-			fmt.Println("PUSHED YELLOW")
-			ledyellow.On()
-			cotcot.Run()
-			ledyellow.Off()
-		})	
-		
-                gobot.On(buttonblue.Event("push"), func(data interface{}) {
-	                toilets := exec.Command("play", "toilets.mp3")
-                        fmt.Println("PUSHED BLUE")
-                        ledblue.On()
-                        toilets.Run()
-                        ledblue.Off()
-                })
-
-                gobot.On(buttonwhite.Event("push"), func(data interface{}) {
-	                whip := exec.Command("play", "whip.mp3")
-                        fmt.Println("PUSHED WHITE")
-                        ledwhite.On()
-                        whip.Run()
-                        ledwhite.Off()
-                })
+		for name, b := range buttons {
+			gobot.On(b.button.Event("push"), func(data interface{}) {
+				fmt.Println(name + " pushed")
+				command := exec.Command("play", chooseSound(b.soundPath))
+				b.led.On()
+				command.Run()
+				b.led.Off()
+			})
+		}
 	}
 
 	robot := gobot.NewRobot("Lubeck",
 		[]gobot.Connection{r},
-		[]gobot.Device{buttonred, buttongreen, buttonyellow, buttonblue, buttonwhite, ledred, ledgreen, ledyellow, ledblue, ledwhite},
+		[]gobot.Device{
+			buttons["red"].button, buttons["green"].button, buttons["yellow"].button, buttons["blue"].button, buttons["white"].button,
+			buttons["red"].led, buttons["green"].led, buttons["yellow"].led, buttons["blue"].led, buttons["white"].led,
+		},
 		work,
 	)
 
