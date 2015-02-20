@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"math/rand"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/hybridgroup/gobot"
@@ -17,26 +19,56 @@ type ArcadeButton struct {
 	led       *gpio.LedDriver
 	button    *gpio.ButtonDriver
 	soundPath string
+	process	  *os.Process
 }
 
 func chooseSound(dirname string) string {
 	rand.Seed(time.Now().Unix())
 
-	files, _ := ioutil.ReadDir(dirname)
+	fileList := []string{}
+	_ = filepath.Walk(dirname, func(path string, f os.FileInfo, err error) error {
+		if (strings.Contains(path, "mp3")) {
+		        fileList = append(fileList, path)
+		}
+		return nil
+	})
 
-	file := files[rand.Intn(len(files))]
+	file := fileList[rand.Intn(len(fileList))]
 
-	return dirname + "/" + file.Name()
+	return file
 }
 
-func makeButtonPushHandler(b ArcadeButton) func(data interface{}) {
+func makeButtonPushHandler(b *ArcadeButton) func(data interface{}) {
 	button := b
 	return func(data interface{}) {
 		fmt.Println(button.name + " pushed")
-		command := exec.Command("play", chooseSound(b.soundPath))
+
+		sound := chooseSound(button.soundPath)
+
+		command := exec.Command("play", chooseSound(button.soundPath))
+
 		button.led.On()
-		command.Run()
-		button.led.Off()
+		if (strings.Contains(sound, "pushmode")) {
+			command.Start()
+			fmt.Println(command.Process)
+			button.process = command.Process
+		} else {
+			command.Run()
+			button.process = nil
+			button.led.Off()
+		}
+	}
+}
+
+func makeButtonReleaseHandler(b *ArcadeButton) func(data interface{}) {
+	button := b
+	return func(data interface{}) {
+		fmt.Println(button.process)
+		if (button.process != nil) {
+			fmt.Println(button.process)
+			button.process.Kill()
+			button.led.Off()
+		}
 	}
 }
 
@@ -45,11 +77,11 @@ func main() {
 	r := raspi.NewRaspiAdaptor("raspi")
 
 	var buttons = map[string]ArcadeButton{
-		"red":    {"red", gpio.NewLedDriver(r, "led-red", "3"), gpio.NewButtonDriver(r, "button-red", "15"), "./sounds/tragic"},
-		"green":  {"green", gpio.NewLedDriver(r, "led-green", "5"), gpio.NewButtonDriver(r, "button-green", "19"), "./sounds/tagueule"},
-		"yellow": {"yellow", gpio.NewLedDriver(r, "led-yellow", "7"), gpio.NewButtonDriver(r, "button-yellow", "21"), "./sounds/wtf"},
-		"blue":   {"blue", gpio.NewLedDriver(r, "led-blue", "11"), gpio.NewButtonDriver(r, "button-blue", "23"), "./sounds/yeah"},
-		"white":  {"white", gpio.NewLedDriver(r, "led-white", "13"), gpio.NewButtonDriver(r, "button-white", "12"), "./sounds/slap"},
+		"red":    {"red", gpio.NewLedDriver(r, "led-red", "3"), gpio.NewButtonDriver(r, "button-red", "15"), "./sounds/tragic",nil},
+		"green":  {"green", gpio.NewLedDriver(r, "led-green", "5"), gpio.NewButtonDriver(r, "button-green", "19"), "./sounds/tagueule", nil},
+		"yellow": {"yellow", gpio.NewLedDriver(r, "led-yellow", "7"), gpio.NewButtonDriver(r, "button-yellow", "21"), "./sounds/wtf", nil},
+		"blue":   {"blue", gpio.NewLedDriver(r, "led-blue", "11"), gpio.NewButtonDriver(r, "button-blue", "23"), "./sounds/yeah", nil},
+		"white":  {"white", gpio.NewLedDriver(r, "led-white", "13"), gpio.NewButtonDriver(r, "button-white", "12"), "./sounds/slap", nil},
 	}
 
 	gbot := gobot.NewGobot()
@@ -73,7 +105,8 @@ func main() {
 
 	work := func() {
 		for _, b := range buttons {
-			gobot.On(b.button.Event("push"), makeButtonPushHandler(b))
+			gobot.On(b.button.Event("push"), makeButtonPushHandler(&b))
+			gobot.On(b.button.Event("release"), makeButtonReleaseHandler(&b))
 		}
 	}
 
