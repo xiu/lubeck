@@ -20,9 +20,10 @@ type ArcadeButton struct {
 	button    *gpio.ButtonDriver
 	soundPath string
 	process   chan *os.Process
+	history   map[string]int
 }
 
-func chooseSound(dirname string) string {
+func chooseSound(dirname string, history map[string]int) string {
 	rand.Seed(time.Now().Unix())
 
 	fileList := []string{}
@@ -33,19 +34,35 @@ func chooseSound(dirname string) string {
 		return nil
 	})
 
-	file := fileList[rand.Intn(len(fileList))]
+	filtered := []string{}
+	for _,file := range fileList {
+		seen := history[file]
+		if seen==0 {
+			filtered = append(filtered, file)
+		}
+	}
+
+	file := filtered[rand.Intn(len(filtered))]
+	if len(filtered) == 1 {
+		for k:= range history {
+			history[k]=0
+		}
+	}
+	history[file] = 1
 
 	return file
 }
 
-func makeButtonPushHandler(b ArcadeButton) func(data interface{}) {
-	button := b
+func makeButtonPushHandler(buttonName string) func(data interface{}) {
+	name := buttonName
 	return func(data interface{}) {
+		button := buttons[name]
 		fmt.Println(button.name + " pushed")
+		// fmt.Println(button.history)
 
-		sound := chooseSound(button.soundPath)
+		sound := chooseSound(button.soundPath, button.history)
 
-		command := exec.Command("play", chooseSound(button.soundPath))
+		command := exec.Command("play", sound)
 
 		button.led.On()
 		if strings.Contains(sound, "pushmode") {
@@ -57,12 +74,14 @@ func makeButtonPushHandler(b ArcadeButton) func(data interface{}) {
 			button.led.Off()
 			button.process <- nil
 		}
+		button.history[sound] = 1
 	}
 }
 
-func makeButtonReleaseHandler(b ArcadeButton) func(data interface{}) {
-	button := b
+func makeButtonReleaseHandler(buttonName string) func(data interface{}) {
+	name := buttonName
 	return func(data interface{}) {
+		button := buttons[name]
 		p := <-button.process
 		if p != nil {
 			fmt.Println(p)
@@ -72,16 +91,18 @@ func makeButtonReleaseHandler(b ArcadeButton) func(data interface{}) {
 	}
 }
 
+var buttons map[string]ArcadeButton
+
 func main() {
 
 	r := raspi.NewRaspiAdaptor("raspi")
 
-	var buttons = map[string]ArcadeButton{
-		"red":    {"red", gpio.NewLedDriver(r, "led-red", "3"), gpio.NewButtonDriver(r, "button-red", "15"), "./sounds/tragic", make(chan *os.Process)},
-		"green":  {"green", gpio.NewLedDriver(r, "led-green", "5"), gpio.NewButtonDriver(r, "button-green", "19"), "./sounds/tagueule", make(chan *os.Process)},
-		"yellow": {"yellow", gpio.NewLedDriver(r, "led-yellow", "7"), gpio.NewButtonDriver(r, "button-yellow", "21"), "./sounds/wtf", make(chan *os.Process)},
-		"blue":   {"blue", gpio.NewLedDriver(r, "led-blue", "11"), gpio.NewButtonDriver(r, "button-blue", "23"), "./sounds/yeah", make(chan *os.Process)},
-		"white":  {"white", gpio.NewLedDriver(r, "led-white", "13"), gpio.NewButtonDriver(r, "button-white", "12"), "./sounds/slap", make(chan *os.Process)},
+	buttons = map[string]ArcadeButton{
+		"red":    {"red", gpio.NewLedDriver(r, "led-red", "3"), gpio.NewButtonDriver(r, "button-red", "15"), "./sounds/tragic", make(chan *os.Process), make(map[string]int)},
+		"green":  {"green", gpio.NewLedDriver(r, "led-green", "5"), gpio.NewButtonDriver(r, "button-green", "19"), "./sounds/tagueule", make(chan *os.Process), make(map[string]int)},
+		"yellow": {"yellow", gpio.NewLedDriver(r, "led-yellow", "7"), gpio.NewButtonDriver(r, "button-yellow", "21"), "./sounds/wtf", make(chan *os.Process), make(map[string]int)},
+		"blue":   {"blue", gpio.NewLedDriver(r, "led-blue", "11"), gpio.NewButtonDriver(r, "button-blue", "23"), "./sounds/yeah", make(chan *os.Process), make(map[string]int)},
+		"white":  {"white", gpio.NewLedDriver(r, "led-white", "13"), gpio.NewButtonDriver(r, "button-white", "12"), "./sounds/slap", make(chan *os.Process), make(map[string]int)},
 	}
 
 	gbot := gobot.NewGobot()
@@ -105,8 +126,8 @@ func main() {
 
 	work := func() {
 		for _, b := range buttons {
-			gobot.On(b.button.Event("push"), makeButtonPushHandler(b))
-			gobot.On(b.button.Event("release"), makeButtonReleaseHandler(b))
+			gobot.On(b.button.Event("push"), makeButtonPushHandler(b.name))
+			gobot.On(b.button.Event("release"), makeButtonReleaseHandler(b.name))
 		}
 	}
 
